@@ -18,6 +18,7 @@ struct GameState
     Position foodPosition;
     int score;
     bool gameOver;
+    bool gameStarted;
     float moveTimer;
     float moveDelay;
 };
@@ -63,6 +64,7 @@ void ResetGame(GameState &game)
     game.snake.push_back({8, 10});
     game.moveTimer = 0.0f;
     game.gameOver = false;
+    game.gameStarted = false;
     game.score = 0;
     game.snakeDirection = {1, 0};
     game.foodPosition = {5, 5};
@@ -147,39 +149,57 @@ void DrawGame(const GameState &game, int gridSize, int cellSize)
     BeginDrawing();
 
     ClearBackground(RAYWHITE);
+    // Grid
     for (int y = 0; y < gridSize; y++)
     {
         for (int x = 0; x < gridSize; x++)
         {
             DrawRectangle(x * cellSize, y * cellSize, cellSize, cellSize, LIGHTGRAY);
+            DrawRectangleLines(x * cellSize, y * cellSize, cellSize, cellSize, Fade(GRAY, 0.5f));
         }
     }
-
-    DrawRectangle(
-        game.foodPosition.x * cellSize,
-        game.foodPosition.y * cellSize,
-        cellSize,
-        cellSize,
-        RED);
-
-    for (Position segment : game.snake)
+    // check is game running.
+    if (!game.gameStarted)
     {
-        DrawRectangle(
-            segment.x * cellSize,
-            segment.y * cellSize,
-            cellSize,
-            cellSize,
-            GREEN);
+        DrawText("SNAKE", 220, 220, 40, DARKGREEN);
+        DrawText("Press ENTER to Start", 170, 280, 20, DARKGRAY);
     }
-    if (game.gameOver)
+    else
     {
-        DrawText("Game Over", 210, 200, 40, RED);
-        DrawText(
-            TextFormat("Score: %i", game.score),
-            220,
-            230,
-            40,
+        // Food
+        DrawRectangle(
+            game.foodPosition.x * cellSize,
+            game.foodPosition.y * cellSize,
+            cellSize,
+            cellSize,
             RED);
+
+        // Snake
+        Position segment = game.snake[0];
+
+        DrawRectangle(segment.x * cellSize, segment.y * cellSize, cellSize, cellSize, DARKGREEN);
+        for (int i = 1; i < game.snake.size(); i++)
+        {
+            Position segment = game.snake[i];
+
+            DrawRectangle(
+                segment.x * cellSize,
+                segment.y * cellSize,
+                cellSize,
+                cellSize,
+                GREEN);
+        }
+
+        if (game.gameOver)
+        {
+            DrawText("Game Over", 210, 200, 40, RED);
+            DrawText(
+                TextFormat("Score: %i", game.score),
+                220,
+                230,
+                40,
+                RED);
+        }
     }
     EndDrawing();
 }
@@ -199,15 +219,23 @@ int main()
     {
         float dt = GetFrameTime();
         game.moveTimer += dt;
-
-        // snake direction.
-        HandleInput(game.snakeDirection);
-        // move snake.
-        Position previousTailPosition = MoveSnake(game);
-        // Check collisions.
-        CheckCollisions(game, gridSize);
-        // Update.
-        UpdateGame(game, gridSize, previousTailPosition);
+        // check if game has started.
+        if (!game.gameStarted && IsKeyPressed(KEY_ENTER))
+        {
+            game.gameStarted = true;
+        }
+        // has game started do this.
+        if (game.gameStarted)
+        {
+            // snake direction.
+            HandleInput(game.snakeDirection);
+            // move snake.
+            Position previousTailPosition = MoveSnake(game);
+            // Check collisions.
+            CheckCollisions(game, gridSize);
+            // Update.
+            UpdateGame(game, gridSize, previousTailPosition);
+        }
 
         if (game.gameOver && IsKeyPressed(KEY_ENTER))
         {
