@@ -11,24 +11,26 @@ struct Direction
     int x;
     int y;
 };
+struct GameState
+{
+    std::vector<Position> snake;
+    Direction snakeDirection;
+    Position foodPosition;
+    int score;
+    bool gameOver;
+    float moveTimer;
+    float moveDelay;
+};
 
 bool IsSnakeOutsideGrid(const std::vector<Position> &snake, int gridSize)
 {
-    if (snake[0].x < 0 || snake[0].x >= gridSize || snake[0].y < 0 || snake[0].y >= gridSize)
-    {
-        return true;
-    }
-    return false;
+    return (snake[0].x < 0 || snake[0].x >= gridSize || snake[0].y < 0 || snake[0].y >= gridSize);
 }
 
 bool IsSnakeEatingFood(const std::vector<Position> &snake, const Position &foodPosition)
 {
-    if (snake[0].x == foodPosition.x &&
-        snake[0].y == foodPosition.y)
-    {
-        return true;
-    }
-    return false;
+    return (snake[0].x == foodPosition.x &&
+            snake[0].y == foodPosition.y);
 }
 bool IsFoodOnSnake(const std::vector<Position> &snake, const Position &foodPosition)
 {
@@ -53,139 +55,166 @@ bool IsSnakeCollidingWithItself(const std::vector<Position> &snake)
     }
     return false;
 }
-void ResetGame(std::vector<Position> &snake, bool &gameOver, int &score, float &moveTimer, Direction &snakeDirection, Position &foodPosition)
+void ResetGame(GameState &game)
 {
-    snake.clear();
-    snake.push_back({10, 10});
-    snake.push_back({9, 10});
-    snake.push_back({8, 10});
-    moveTimer = 0.0f;
-    gameOver = false;
-    score = 0;
-    snakeDirection = {1, 0};
-    foodPosition = {5, 5};
+    game.snake.clear();
+    game.snake.push_back({10, 10});
+    game.snake.push_back({9, 10});
+    game.snake.push_back({8, 10});
+    game.moveTimer = 0.0f;
+    game.gameOver = false;
+    game.score = 0;
+    game.snakeDirection = {1, 0};
+    game.foodPosition = {5, 5};
+    game.moveDelay = 0.15f;
+}
+
+void HandleInput(Direction &snakeDirection)
+{
+    if (IsKeyPressed(KEY_RIGHT) && snakeDirection.x != -1)
+    {
+        snakeDirection.x = 1;
+        snakeDirection.y = 0;
+    }
+    if (IsKeyPressed(KEY_LEFT) && snakeDirection.x != 1)
+    {
+        snakeDirection.x = -1;
+        snakeDirection.y = 0;
+    }
+    if (IsKeyPressed(KEY_DOWN) && snakeDirection.y != -1)
+    {
+        snakeDirection.x = 0;
+        snakeDirection.y = 1;
+    }
+    if (IsKeyPressed(KEY_UP) && snakeDirection.y != 1)
+    {
+        snakeDirection.x = 0;
+        snakeDirection.y = -1;
+    }
+}
+Position MoveSnake(GameState &game)
+{
+    Position previousTailPosition = game.snake.back();
+    if (!game.gameOver && game.moveTimer >= game.moveDelay)
+    {
+        Position previousPosition = game.snake[0];
+        game.snake[0].x += game.snakeDirection.x;
+        game.snake[0].y += game.snakeDirection.y;
+        for (int i = 1; i < game.snake.size(); i++)
+        {
+            Position temp = game.snake[i];
+            game.snake[i] = previousPosition;
+            previousPosition = temp;
+        }
+
+        game.moveTimer = 0.0f;
+    }
+    return previousTailPosition;
+}
+void UpdateGame(GameState &game, int gridSize, const Position &previousTailPosition)
+{
+    if (!game.gameOver && IsSnakeEatingFood(game.snake, game.foodPosition))
+    {
+        game.snake.push_back(previousTailPosition);
+        game.score += 1;
+        game.moveDelay -= 0.005f;
+
+        if (game.moveDelay < 0.05f)
+        {
+            game.moveDelay = 0.05f;
+        }
+
+        do
+        {
+            game.foodPosition.x = GetRandomValue(0, gridSize - 1);
+            game.foodPosition.y = GetRandomValue(0, gridSize - 1);
+        } while (IsFoodOnSnake(game.snake, game.foodPosition));
+    }
+}
+void CheckCollisions(GameState &game, int gridSize)
+{
+    if (IsSnakeOutsideGrid(game.snake, gridSize))
+    {
+        game.gameOver = true;
+    }
+    if (IsSnakeCollidingWithItself(game.snake))
+    {
+        game.gameOver = true;
+    }
+}
+void DrawGame(const GameState &game, int gridSize, int cellSize)
+{
+    BeginDrawing();
+
+    ClearBackground(RAYWHITE);
+    for (int y = 0; y < gridSize; y++)
+    {
+        for (int x = 0; x < gridSize; x++)
+        {
+            DrawRectangle(x * cellSize, y * cellSize, cellSize, cellSize, LIGHTGRAY);
+        }
+    }
+
+    DrawRectangle(
+        game.foodPosition.x * cellSize,
+        game.foodPosition.y * cellSize,
+        cellSize,
+        cellSize,
+        RED);
+
+    for (Position segment : game.snake)
+    {
+        DrawRectangle(
+            segment.x * cellSize,
+            segment.y * cellSize,
+            cellSize,
+            cellSize,
+            GREEN);
+    }
+    if (game.gameOver)
+    {
+        DrawText("Game Over", 210, 200, 40, RED);
+        DrawText(
+            TextFormat("Score: %i", game.score),
+            220,
+            230,
+            40,
+            RED);
+    }
+    EndDrawing();
 }
 
 int main()
 {
     const int gridSize = 20;
     const int cellSize = 30;
-    float moveTimer = 0.0f;
-    const float moveDelay = 0.15f;
-    bool gameOver = false;
-    int score = 0;
 
     InitWindow(600, 600, "Snake");
     SetTargetFPS(60);
 
-    Direction snakeDirection = {1, 0};
-    std::vector<Position> snake;
-    snake.push_back({10, 10});
-    snake.push_back({9, 10});
-    snake.push_back({8, 10});
-
-    Position foodPosition = {5, 5};
+    GameState game;
+    ResetGame(game);
 
     while (!WindowShouldClose())
     {
         float dt = GetFrameTime();
-        moveTimer += dt;
-        Position previousTailPosition = snake.back();
-        if (IsKeyPressed(KEY_RIGHT) && snakeDirection.x != -1)
-        {
-            snakeDirection.x = 1;
-            snakeDirection.y = 0;
-        }
-        if (IsKeyPressed(KEY_LEFT) && snakeDirection.x != 1)
-        {
-            snakeDirection.x = -1;
-            snakeDirection.y = 0;
-        }
-        if (IsKeyPressed(KEY_DOWN) && snakeDirection.y != -1)
-        {
-            snakeDirection.x = 0;
-            snakeDirection.y = 1;
-        }
-        if (IsKeyPressed(KEY_UP) && snakeDirection.y != 1)
-        {
-            snakeDirection.x = 0;
-            snakeDirection.y = -1;
-        }
-        if (!gameOver && moveTimer >= moveDelay)
-        {
-            Position previousPosition = snake[0];
-            snake[0].x += snakeDirection.x;
-            snake[0].y += snakeDirection.y;
-            for (int i = 1; i < snake.size(); i++)
-            {
-                Position temp = snake[i];
-                snake[i] = previousPosition;
-                previousPosition = temp;
-            }
+        game.moveTimer += dt;
 
-            moveTimer = 0.0f;
-        }
-        if (IsSnakeOutsideGrid(snake, gridSize))
-        {
-            gameOver = true;
-        }
-        if (IsSnakeCollidingWithItself(snake))
-        {
-            gameOver = true;
-        }
+        // snake direction.
+        HandleInput(game.snakeDirection);
+        // move snake.
+        Position previousTailPosition = MoveSnake(game);
+        // Check collisions.
+        CheckCollisions(game, gridSize);
+        // Update.
+        UpdateGame(game, gridSize, previousTailPosition);
 
-        if (!gameOver && IsSnakeEatingFood(snake, foodPosition))
+        if (game.gameOver && IsKeyPressed(KEY_ENTER))
         {
-            snake.push_back(previousTailPosition);
-            score += 1;
-            do
-            {
-                foodPosition.x = GetRandomValue(0, gridSize - 1);
-                foodPosition.y = GetRandomValue(0, gridSize - 1);
-            } while (IsFoodOnSnake(snake, foodPosition));
+            ResetGame(game);
         }
-        if (gameOver && IsKeyPressed(KEY_ENTER))
-        {
-            ResetGame(snake, gameOver, score, moveTimer, snakeDirection, foodPosition);
-        }
-        BeginDrawing();
-
-        ClearBackground(RAYWHITE);
-        for (int y = 0; y < gridSize; y++)
-        {
-            for (int x = 0; x < gridSize; x++)
-            {
-                DrawRectangle(x * cellSize, y * cellSize, cellSize, cellSize, LIGHTGRAY);
-            }
-        }
-
-        DrawRectangle(
-            foodPosition.x * cellSize,
-            foodPosition.y * cellSize,
-            cellSize,
-            cellSize,
-            RED);
-
-        for (Position segment : snake)
-        {
-            DrawRectangle(
-                segment.x * cellSize,
-                segment.y * cellSize,
-                cellSize,
-                cellSize,
-                GREEN);
-        }
-        if (gameOver)
-        {
-            DrawText("Game Over", 210, 200, 40, RED);
-            DrawText(
-                TextFormat("Score: %i", score),
-                220,
-                230,
-                40,
-                RED);
-        }
-        EndDrawing();
+        // Draw
+        DrawGame(game, gridSize, cellSize);
     }
     CloseWindow();
     return 0;
